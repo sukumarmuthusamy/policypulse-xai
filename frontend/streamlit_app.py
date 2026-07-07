@@ -12,6 +12,7 @@ DEFAULT_BACKEND_URL = "http://127.0.0.1:8000"
 REQUEST_TIMEOUT_SECONDS = 120.0
 METADATA_TIMEOUT_SECONDS = 5.0
 UPLOAD_TIMEOUT_SECONDS = 300.0
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "suku-pulse")
 
 
 def get_backend_url() -> str:
@@ -23,6 +24,8 @@ def init_session_state() -> None:
         st.session_state.messages = []
     if "last_upload_key" not in st.session_state:
         st.session_state.last_upload_key = None
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
 
 
 def score_to_match_percent(score: float) -> int:
@@ -279,6 +282,26 @@ def handle_user_input(backend_url: str, prompt: str) -> None:
         )
 
 
+def render_password_gateway() -> bool:
+    """Render a simple password gate for public demo protection."""
+    if st.session_state.password_correct:
+        return True
+
+    st.title("PolicyPulse Demo Access")
+    st.caption(
+        "PolicyPulse Demo — Password protected to prevent unauthorized LLM token consumption."
+    )
+    password = st.text_input("Enter demo password", type="password")
+
+    if password == DEMO_PASSWORD:
+        st.session_state.password_correct = True
+        st.rerun()
+    elif password:
+        st.error("Incorrect password. Please try again.")
+
+    return False
+
+
 def main() -> None:
     st.set_page_config(
         page_title="PolicyPulse",
@@ -288,6 +311,9 @@ def main() -> None:
 
     init_session_state()
     backend_url = get_backend_url()
+
+    if not render_password_gateway():
+        return
 
     st.title("PolicyPulse")
     st.caption("Enterprise Policy Copilot — grounded answers from your indexed policy documents")

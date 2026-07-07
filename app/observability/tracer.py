@@ -56,7 +56,8 @@ def utc_now_iso() -> str:
 
 def write_trace(trace: ExecutionTrace, log_path: Path | None = None) -> Path:
     """Append one execution trace as a JSON line to the log file."""
-    path = log_path or get_settings().log_path
+    settings = get_settings()
+    path = log_path or settings.resolved_log_path
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("a", encoding="utf-8") as log_file:
@@ -71,7 +72,8 @@ def read_recent_traces(limit: int = 20, log_path: Path | None = None) -> list[Ex
     if limit < 1:
         return []
 
-    path = log_path or get_settings().log_path
+    settings = get_settings()
+    path = log_path or settings.resolved_log_path
     if not path.exists():
         return []
 

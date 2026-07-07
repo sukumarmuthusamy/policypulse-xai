@@ -20,6 +20,7 @@ from app.observability.tracer import read_recent_traces
 from scripts.build_index import build_policy_index
 
 logger = logging.getLogger(__name__)
+MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 
 
 class HealthResponse(BaseModel):
@@ -214,6 +215,12 @@ async def upload_policy(file: UploadFile = File(...)) -> UploadResponse:
         contents = await file.read()
         if not contents:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        if len(contents) > MAX_UPLOAD_SIZE_BYTES:
+            max_mb = MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds maximum allowed size of {max_mb}MB.",
+            )
         destination.write_bytes(contents)
 
         build_summary = build_policy_index()

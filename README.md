@@ -13,7 +13,9 @@ PolicyPulse is built as a **dual-service architecture** (FastAPI backend + Strea
 | **Hybrid Vector + BM25 Sparse Search (RRF)** | Combines FAISS dense retrieval with BM25 keyword search, fused via Reciprocal Rank Fusion. Eliminates the dense-retrieval blind spot on short, keyword-heavy queries (e.g., hourly pay rates, specific dollar amounts). |
 | **Explainable AI (XAI) Inspector** | Per-response audit panel showing trace ID, latency, tool calls, raw intent, and retrieved chunks with normalized match scores and source citations. |
 | **Live Telemetry Sidebar** | Real-time dashboard of model provider, index health, chunk/vector counts, and rolling p50 / last-query latency from structured execution traces. |
+| **Password-Protected Demo Gateway** | Streamlit access is gated by an environment-driven `DEMO_PASSWORD` to prevent unauthorized LLM token consumption in public demo deployments. |
 | **Dynamic PDF Upload** | Upload policy documents via the UI; indexes rebuild automatically with hot-reload—no container restart required. |
+| **Upload Size Guardrail (10MB)** | Backend `/upload` enforces a strict 10MB limit and returns HTTP 413 for oversized PDFs to keep deployments lightweight and cost-controlled. |
 | **Provider-Agnostic LLM Layer** | Switch between **Gemini** and **OpenAI** for chat and embeddings via environment configuration. |
 | **Structured JSONL Tracing** | Every agent invocation appends a machine-readable trace for observability, debugging, and compliance auditing. |
 | **Lean Container Footprint** | API-based embeddings only—no `sentence-transformers` or local model runtimes. Optimized for serverless and free-tier cloud deployment. |
@@ -103,6 +105,8 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 > **OpenAI users:** Set `MODEL_PROVIDER=openai`, `MODEL_NAME=gpt-4o-mini`, and `OPENAI_API_KEY`.
+>
+> **Demo protection:** Set `DEMO_PASSWORD` in `.env` to secure public demos. If omitted, the frontend uses `suku-pulse` as the fallback password.
 
 ### 3. Add policy documents
 
@@ -162,7 +166,7 @@ Persistent data (`data/policies/`, `storage/`) survives container restarts via v
 | `/health` | `GET` | Returns `{"status": "ok"}` |
 | `/metadata` | `GET` | Provider info, index status, chunk/vector counts, rolling latency |
 | `/agent` | `POST` | `{"query": "..."}` → answer with full execution trace |
-| `/upload` | `POST` | Multipart PDF upload → rebuild index → hot-reload |
+| `/upload` | `POST` | Multipart PDF upload (max 10MB) → rebuild index → hot-reload; oversized files return HTTP 413 |
 
 **Example agent request:**
 
@@ -261,6 +265,7 @@ python scripts/verify_agent.py     # End-to-end agent smoke test
 | `OPENAI_API_KEY` | — | Required when `MODEL_PROVIDER=openai` |
 | `DEPLOYMENT_TARGET` | `local` | Deployment context: `local`, `docker`, `cloud-run` |
 | `BACKEND_URL` | `http://127.0.0.1:8000` | Frontend → backend URL |
+| `DEMO_PASSWORD` | `suku-pulse` (fallback) | Streamlit demo gateway password; override in `.env` for production/demo deployments |
 | `POLICIES_DIR` | `data/policies` | Source PDF directory |
 | `FAISS_INDEX_PATH` | `storage/faiss.index` | Dense index path |
 | `BM25_INDEX_PATH` | `storage/bm25.pkl` | Sparse index path |
