@@ -105,13 +105,13 @@ def query_agent(backend_url: str, query: str) -> tuple[dict[str, Any] | None, st
 
 def render_policy_uploader(backend_url: str) -> None:
     st.sidebar.subheader("Upload Policy")
-    st.sidebar.caption("Add a PDF to rebuild the local FAISS index instantly.")
+    st.sidebar.caption("Add a PDF to rebuild the local FAISS index instantly (max 10MB).")
 
     uploaded_file = st.sidebar.file_uploader(
-        "Policy PDF",
+        "Upload a policy PDF (Max 10MB)",
         type=["pdf"],
         accept_multiple_files=False,
-        label_visibility="collapsed",
+        help="Backend enforces a strict 10MB file size limit.",
     )
 
     if uploaded_file is None:
