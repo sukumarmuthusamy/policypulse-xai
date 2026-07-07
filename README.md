@@ -286,7 +286,9 @@ policypulse/
 │   ├── services/               # LLM and embedding factories
 │   ├── rag/hybrid.py           # RRF fusion and tokenization
 │   └── observability/tracer.py # Structured JSONL tracing
-├── frontend/streamlit_app.py   # Chat UI, telemetry, XAI Inspector
+├── frontend/
+│   ├── streamlit_app.py        # Chat UI, telemetry, XAI Inspector
+│   └── .streamlit/config.toml  # Streamlit framework configs
 ├── scripts/                    # Index build and verification CLIs
 ├── data/policies/              # Source PDFs (volume-mounted)
 ├── storage/                    # Persisted indexes and traces
