@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.env
+structured_logs.jsonl
+storage/faiss.index
+storage/bm25.pkl
+storage/chunks.json
+.cursor/

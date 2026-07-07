@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+streamlit
+httpx
+pydantic
+pydantic-settings
+faiss-cpu
+numpy
+pypdf
+rank-bm25
+google-generativeai
+openai
+python-dotenv
+pytest
