@@ -9,7 +9,7 @@ PolicyPulse is built as a **dual-service architecture** (FastAPI backend + Strea
 | Area | Status |
 |------|--------|
 | **Phases 1–5** (RAG, agent, API, UI, Docker) | ✅ Complete |
-| **Phase 6 local** (security, IAM client code, multi-doc retrieval) | ✅ Complete |
+| **Phase 6 local** (security, IAM client code, multi-doc retrieval, XAI labeling) | ✅ Complete |
 | **Phase 6 cloud** (GCS mounts, Cloud Run deploy, Secret Manager) | ⬜ Pending |
 | **Phase 7** (daily audit reports, SMTP notifier) | ⬜ Planned |
 
@@ -20,7 +20,7 @@ PolicyPulse is built as a **dual-service architecture** (FastAPI backend + Strea
 | Capability | Description |
 |------------|-------------|
 | **Hybrid Vector + BM25 Sparse Search (RRF)** | Combines FAISS dense retrieval with BM25 keyword search, fused via Reciprocal Rank Fusion. Eliminates the dense-retrieval blind spot on short, keyword-heavy queries (e.g., hourly pay rates, specific dollar amounts). |
-| **Explainable AI (XAI) Inspector** | Per-response audit panel showing trace ID, latency, tool calls, raw intent, and retrieved chunks with normalized match scores and source citations. |
+| **Explainable AI (XAI) Inspector** | Per-response audit panel showing trace ID, latency, tool calls, raw intent, and retrieved chunks with **relative match** scores (min-max RRF within the query result set), source citations, and an explanatory caption. |
 | **Live Telemetry Sidebar** | Real-time dashboard of model provider, index health, chunk/vector counts, and rolling p50 / last-query latency from structured execution traces. |
 | **Password-Protected Demo Gateway** | Streamlit access is gated by an environment-driven `DEMO_PASSWORD` to prevent unauthorized LLM token consumption in public demo deployments. |
 | **Dynamic PDF Upload** | Upload policy documents via the UI; indexes rebuild automatically with hot-reload—no container restart required. |

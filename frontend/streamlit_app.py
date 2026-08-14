@@ -279,6 +279,10 @@ def render_xai_inspector(trace: dict[str, Any]) -> None:
 
         chunks = trace.get("retrieved_chunks", [])
         st.markdown(f"**Retrieved chunks ({len(chunks)})**")
+        st.caption(
+            "Relative Match % is scaled to the top fused result for this query, "
+            "not an absolute relevance score."
+        )
         if not chunks:
             st.caption("No FAISS passages were retrieved for this response.")
             return
@@ -292,9 +296,12 @@ def render_xai_inspector(trace: dict[str, Any]) -> None:
             preview = text if len(text) <= 500 else text[:500] + "…"
 
             st.markdown(
-                f"**Passage {index}** — `{source}` · page {page} · **{match_percent}% Match**"
+                f"**Passage {index}** — `{source}` · page {page} · **{match_percent}% Relative Match**"
             )
-            st.progress(score_to_progress_value(score), text=f"Retrieval confidence: {match_percent}%")
+            st.progress(
+                score_to_progress_value(score),
+                text=f"Relative match: {match_percent}%",
+            )
             st.text(preview)
             if index < len(chunks):
                 st.divider()

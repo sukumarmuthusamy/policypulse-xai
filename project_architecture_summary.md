@@ -29,7 +29,7 @@ The architecture prioritizes **low overhead**, **fast serverless cold starts**, 
 | **6** | Live Demo Security + Google Cloud Run Deployment | 🟡 Local complete · Cloud pending |
 | **7** | Automated LLM Observability & Daily Audit Reporting | ⬜ Planned |
 
-**Phase 6 progress:** All **local/Docker deliverables are complete** — security hardening, Cloud Run IAM client code (`streamlit_app.py` + `google-auth`), index-build `PYTHONPATH` fix, multi-doc retrieval verified, and UI dollar-sign rendering fix. **Remaining work is GCP infrastructure only:** deploy scripts, GCS volume mounts, VPC egress, Secret Manager, and dual `run.invoker` IAM bindings.
+**Phase 6 progress:** All **local/Docker deliverables are complete** — security hardening, Cloud Run IAM client code, index-build `PYTHONPATH` fix, multi-doc retrieval verified (3-policy demo corpus), dollar-sign rendering fix, and XAI **Relative Match** labeling. **Remaining work is GCP infrastructure only:** deploy scripts, GCS volume mounts, VPC egress, Secret Manager, and dual `run.invoker` IAM bindings.
 
 **Phase 7 scope:** Enhanced tracer token logging, daily batch audit endpoint (Cloud Scheduler OIDC auth), and SMTP executive email reports.
 
@@ -62,6 +62,9 @@ policypulse/
 │   ├── verify_index.py            # CLI index load/search smoke test
 │   └── verify_agent.py            # CLI end-to-end agent smoke test
 ├── data/policies/                 # Source PDF documents (volume-mounted in Docker)
+│   ├── ACME CORP_Remote work policy.pdf
+│   ├── ACME_CORP_Travel_and_Expense_policy.pdf
+│   └── ACME_CORP_PTO_and_Leave_policy.pdf
 ├── storage/                       # Persisted indexes and chunk metadata (volume-mounted)
 │   ├── faiss.index
 │   ├── bm25.pkl
@@ -284,7 +287,8 @@ streamlit run frontend/streamlit_app.py --server.port=8501 --server.address=0.0.
 | **`google-auth` dependency** | `frontend.Dockerfile` — pip install for identity token fetch |
 | **Index build in Docker** | `backend.Dockerfile` — `PYTHONPATH=/app` so `scripts/build_index.py` imports `app` inside containers |
 | **Dollar-sign rendering fix** | `escape_markdown_dollars()` applied to assistant answers and XAI Raw intent panel (prevents Streamlit LaTeX mangling of `$75`/`$110`) |
-| **Multi-doc retrieval verified** | Local smoke tests passed: doc-scoped queries, ambiguous cross-doc attribution, varied RRF match scores |
+| **Relative Match labeling** | XAI Inspector labels scores as **Relative Match %** with caption explaining min-max RRF is relative to the top fused result for the query |
+| **Multi-doc retrieval verified** | Local smoke tests passed on 3-policy demo corpus (remote work, travel/expense, PTO/leave): doc-scoped queries, ambiguous cross-doc attribution, varied RRF scores |
 
 ### 6.2 Cloud Run Deployment Strategy (⬜ Pending — GCP infrastructure only)
 
@@ -670,11 +674,12 @@ Rendered as an **`st.expander("XAI Inspector")`** beneath each assistant chat me
 | Tool call count | `len(trace.tool_calls)` |
 | Raw intent | `trace.raw_intent` |
 | Selected tools | Name, args, per-tool `latency_ms` |
-| Retrieved chunks | Source file, page, match %, progress bar, text preview |
+| Retrieved chunks | Source file, page, relative match %, progress bar, text preview |
 
-**Score display:** Hybrid RRF scores are normalized to 0–1 in `normalize_rrf_scores()` before populating `RetrievedChunkTrace.score`. The UI renders:
-- **Percentage label:** `84% Match`
-- **`st.progress()` bar:** visual confidence indicator
+**Score display:** Hybrid RRF scores are min-max normalized to 0–1 in `normalize_rrf_scores()` before populating `RetrievedChunkTrace.score`. The UI renders:
+- **Percentage label:** `84% Relative Match` (relative to the top fused result for this query, not absolute relevance)
+- **`st.progress()` bar:** `Relative match: …%`
+- **Section caption:** clarifies that match % is query-relative, not corpus-wide
 
 **Trace persistence:** Every `/agent` call appends one JSON line to `structured_logs.jsonl` via `write_trace()`. `/metadata` reads last 20 traces for p50/last latency rollup.
 
