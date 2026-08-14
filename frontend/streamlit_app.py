@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import httpx
@@ -13,10 +14,53 @@ REQUEST_TIMEOUT_SECONDS = 120.0
 METADATA_TIMEOUT_SECONDS = 5.0
 UPLOAD_TIMEOUT_SECONDS = 300.0
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "suku-pulse")
+_IDENTITY_TOKEN_TTL_SECONDS = 50 * 60
+_identity_token_cache: dict[str, float | str] = {"token": "", "expires_at": 0.0}
 
 
 def get_backend_url() -> str:
     return os.getenv("BACKEND_URL", DEFAULT_BACKEND_URL).rstrip("/")
+
+
+def is_cloud_run_deployment() -> bool:
+    """True only on Cloud Run; local and Docker Compose skip IAM token fetch."""
+    if os.getenv("K_SERVICE"):
+        return True
+    deployment_target = os.getenv("DEPLOYMENT_TARGET", "").strip().lower().replace("_", "-")
+    return deployment_target == "cloud-run"
+
+
+def _fetch_identity_token(audience: str) -> str:
+    """Lazy-import google-auth so local/Docker images never require it at import time."""
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+
+    auth_request = google.auth.transport.requests.Request()
+    return google.oauth2.id_token.fetch_id_token(auth_request, audience)
+
+
+def _get_cached_identity_token(audience: str) -> str:
+    """Return a cached Cloud Run identity token, refreshing before ~1-hour expiry."""
+    now = time.time()
+    cached_token = str(_identity_token_cache.get("token", ""))
+    expires_at = float(_identity_token_cache.get("expires_at", 0.0))
+    if cached_token and now < expires_at:
+        return cached_token
+
+    token = _fetch_identity_token(audience)
+    _identity_token_cache["token"] = token
+    _identity_token_cache["expires_at"] = now + _IDENTITY_TOKEN_TTL_SECONDS
+    return token
+
+
+def get_backend_auth_headers(backend_url: str) -> dict[str, str]:
+    """Attach IAM identity token on Cloud Run; no auth headers for local/Docker."""
+    if not is_cloud_run_deployment():
+        return {}
+
+    audience = backend_url.rstrip("/")
+    token = _get_cached_identity_token(audience)
+    return {"Authorization": f"Bearer {token}"}
 
 
 def init_session_state() -> None:
@@ -39,10 +83,16 @@ def score_to_progress_value(score: float) -> float:
     return max(0.0, min(float(score), 1.0))
 
 
+def escape_markdown_dollars(text: str) -> str:
+    """Prevent Streamlit from treating paired $ as LaTeX math delimiters."""
+    return text.replace("$", "\\$")
+
+
 def fetch_metadata(backend_url: str) -> tuple[dict[str, Any] | None, str | None]:
     try:
+        headers = get_backend_auth_headers(backend_url)
         with httpx.Client(timeout=METADATA_TIMEOUT_SECONDS) as client:
-            response = client.get(f"{backend_url}/metadata")
+            response = client.get(f"{backend_url}/metadata", headers=headers)
             response.raise_for_status()
             return response.json(), None
     except httpx.ConnectError:
@@ -60,9 +110,11 @@ def upload_policy_pdf(
     uploaded_file: Any,
 ) -> tuple[dict[str, Any] | None, str | None]:
     try:
+        headers = get_backend_auth_headers(backend_url)
         with httpx.Client(timeout=UPLOAD_TIMEOUT_SECONDS) as client:
             response = client.post(
                 f"{backend_url}/upload",
+                headers=headers,
                 files={"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")},
             )
             response.raise_for_status()
@@ -84,8 +136,13 @@ def upload_policy_pdf(
 
 def query_agent(backend_url: str, query: str) -> tuple[dict[str, Any] | None, str | None]:
     try:
+        headers = get_backend_auth_headers(backend_url)
         with httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-            response = client.post(f"{backend_url}/agent", json={"query": query})
+            response = client.post(
+                f"{backend_url}/agent",
+                headers=headers,
+                json={"query": query},
+            )
             response.raise_for_status()
             return response.json(), None
     except httpx.ConnectError:
@@ -207,7 +264,7 @@ def render_xai_inspector(trace: dict[str, Any]) -> None:
         raw_intent = trace.get("raw_intent")
         if raw_intent:
             st.markdown("**Raw intent**")
-            st.info(raw_intent)
+            st.info(escape_markdown_dollars(str(raw_intent)))
 
         tool_calls = trace.get("tool_calls", [])
         if tool_calls:
@@ -247,7 +304,10 @@ def render_chat_history() -> None:
     for message in st.session_state.messages:
         role = message["role"]
         with st.chat_message(role):
-            st.markdown(message["content"])
+            content = message["content"]
+            if role == "assistant":
+                content = escape_markdown_dollars(content)
+            st.markdown(content)
             if role == "assistant" and message.get("trace"):
                 render_xai_inspector(message["trace"])
 
@@ -273,7 +333,7 @@ def handle_user_input(backend_url: str, prompt: str) -> None:
         answer = payload.get("answer", "").strip() or "_No answer returned by the agent._"
         trace = payload.get("trace")
 
-        st.markdown(answer)
+        st.markdown(escape_markdown_dollars(answer))
         if trace:
             render_xai_inspector(trace)
 

@@ -3,6 +3,7 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app \
     POLICIES_DIR=data/policies \
     FAISS_INDEX_PATH=storage/faiss.index \
     BM25_INDEX_PATH=storage/bm25.pkl \

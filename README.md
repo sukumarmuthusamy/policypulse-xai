@@ -4,6 +4,15 @@
 
 PolicyPulse is built as a **dual-service architecture** (FastAPI backend + Streamlit frontend) designed for local development, Docker Compose deployment, and future Cloud Run scaling. It uses a **native Python tool-calling agent**—no LangGraph, LangChain orchestration, or local embedding runtimes—keeping containers lightweight and cold starts fast.
 
+### Project status
+
+| Area | Status |
+|------|--------|
+| **Phases 1–5** (RAG, agent, API, UI, Docker) | ✅ Complete |
+| **Phase 6 local** (security, IAM client code, multi-doc retrieval) | ✅ Complete |
+| **Phase 6 cloud** (GCS mounts, Cloud Run deploy, Secret Manager) | ⬜ Pending |
+| **Phase 7** (daily audit reports, SMTP notifier) | ⬜ Planned |
+
 ---
 
 ## Features
@@ -122,7 +131,10 @@ The backend requires a pre-built FAISS + BM25 index before it can serve queries.
 
 ```bash
 docker compose run --rm backend python scripts/build_index.py
+docker compose restart backend
 ```
+
+The backend image sets `PYTHONPATH=/app` so CLI scripts such as `scripts/build_index.py` can import the `app` package. After rebuilding the index, restart the backend container so it reloads the new FAISS/BM25 artifacts into memory.
 
 This scans `data/policies/`, chunks each PDF (800 characters, 150 overlap), embeds via your configured provider API, and writes artifacts to `storage/`:
 

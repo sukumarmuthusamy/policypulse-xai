@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir streamlit httpx
+RUN pip install --no-cache-dir streamlit httpx google-auth
 
 COPY frontend ./frontend
 
