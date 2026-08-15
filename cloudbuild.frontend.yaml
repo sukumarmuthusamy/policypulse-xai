@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - frontend.Dockerfile
+      - -t
+      - us-central1-docker.pkg.dev/policypulse-demo/policypulse/frontend:latest
+      - .
+
+images:
+  - us-central1-docker.pkg.dev/policypulse-demo/policypulse/frontend:latest
