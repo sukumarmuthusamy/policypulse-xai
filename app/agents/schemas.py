@@ -35,6 +35,10 @@ class ChatMessage(BaseModel):
     tool_calls: list[UnifiedToolCall] = Field(default_factory=list)
     tool_call_id: str | None = None
     name: str | None = None
+    # Raw SDK Content object from Gemini response (preserves thought_signature automatically)
+    gemini_raw_content: Any = None
+    
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class ToolDefinition(BaseModel):
@@ -51,6 +55,10 @@ class LLMCompletionResult(BaseModel):
     content: str | None = None
     tool_calls: list[UnifiedToolCall] = Field(default_factory=list)
     raw_intent: str | None = None
+    # Raw SDK Content object from Gemini response (preserves thought_signature automatically)
+    gemini_raw_content: Any = None
+    
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class ToolExecutionResult(BaseModel):

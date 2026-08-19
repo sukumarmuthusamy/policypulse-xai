@@ -8,7 +8,7 @@ faiss-cpu
 numpy
 pypdf
 rank-bm25
-google-generativeai
+google-genai
 openai
 python-dotenv
 pytest

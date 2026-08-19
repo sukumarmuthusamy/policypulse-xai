@@ -1,0 +1,51 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: policypulse-index-build
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          maxRetries: 0
+          timeoutSeconds: 600
+          serviceAccountName: policypulse-backend-sa@policypulse-demo.iam.gserviceaccount.com
+          containers:
+          - image: us-central1-docker.pkg.dev/policypulse-demo/policypulse/backend:latest
+            command:
+            - python
+            args:
+            - scripts/build_index.py
+            env:
+            - name: MODEL_PROVIDER
+              value: gemini
+            - name: DEPLOYMENT_TARGET
+              value: cloud-run
+            - name: POLICIES_DIR
+              value: storage/policies
+            - name: FAISS_INDEX_PATH
+              value: storage/faiss.index
+            - name: BM25_INDEX_PATH
+              value: storage/bm25.pkl
+            - name: CHUNKS_PATH
+              value: storage/chunks.json
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: policypulse-gemini-api-key
+                  key: latest
+            volumeMounts:
+            - name: gcs-storage
+              mountPath: /app/storage
+          volumes:
+          - name: gcs-storage
+            csi:
+              driver: gcsfuse.run.googleapis.com
+              volumeAttributes:
+                bucketName: policypulse-demo-storage

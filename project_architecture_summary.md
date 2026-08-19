@@ -26,10 +26,10 @@ The architecture prioritizes **low overhead**, **fast serverless cold starts**, 
 | **3** | Agent Orchestrator (native tool-calling loop) | ✅ Complete |
 | **4** | FastAPI Backend + Streamlit Frontend | ✅ Complete |
 | **5** | Packaging & Containerization (Docker Compose) | ✅ Complete |
-| **6** | Live Demo Security + Google Cloud Run Deployment | 🟡 Local complete · Cloud pending |
+| **6** | Live Demo Security + Google Cloud Run Deployment | ✅ Complete |
 | **7** | Automated LLM Observability & Daily Audit Reporting | ⬜ Planned |
 
-**Phase 6 progress:** All **local/Docker deliverables are complete** — security hardening, Cloud Run IAM client code, index-build `PYTHONPATH` fix, multi-doc retrieval verified (3-policy demo corpus), dollar-sign rendering fix, and XAI **Relative Match** labeling. **Remaining work is GCP infrastructure only:** deploy scripts, GCS volume mounts, VPC egress, Secret Manager, and dual `run.invoker` IAM bindings.
+**Phase 6 complete:** Security hardening, Cloud Run IAM client code, multi-doc retrieval, XAI Inspector, GCS volume mounts at `/app/storage`, VPC Direct Egress with Private Google Access, Secret Manager for all credentials, dual `run.invoker` IAM bindings (frontend + scheduler SAs), and production deployment validated end-to-end with `gemini-3.6-flash` on the unified `google-genai` SDK.
 
 **Phase 7 scope:** Enhanced tracer token logging, daily batch audit endpoint (Cloud Scheduler OIDC auth), and SMTP executive email reports.
 
@@ -100,7 +100,7 @@ policypulse/
 
 **Key configuration (env-driven):**
 - `MODEL_PROVIDER` — `gemini` | `openai`
-- `MODEL_NAME` — chat model override (defaults: `gemini-2.5-flash`, `gpt-4o-mini`)
+- `MODEL_NAME` — chat model override (defaults: `gemini-3.6-flash`, `gpt-4o-mini`)
 - Embedding defaults: `gemini-embedding-001`, `text-embedding-3-small`
 - Paths: `POLICIES_DIR`, `FAISS_INDEX_PATH`, `BM25_INDEX_PATH`, `CHUNKS_PATH`, `LOG_PATH`
 - `MAX_TOOL_ITERATIONS` — agent loop cap (default 5)
@@ -593,9 +593,8 @@ ADMIN_EMAIL=
 
 ## Next Immediate Tasks
 
-1. **Prepare Cloud Run deployment scripts** — GCS bucket + volume mount at `/app/storage`, Secret Manager secrets (no plaintext), backend `--ingress=internal --no-allow-unauthenticated`, frontend `--vpc-egress=all-traffic`, dual `run.invoker` IAM bindings.
-2. **Deploy and smoke-test on GCP** — negative test (direct backend URL fails) before positive UI tests; verify IAM policy has both frontend and Scheduler SAs.
-3. **Phase 7 (after live demo)** — Extend `tracer.py`, add `notifier.py`, `/cron/daily-report`, Cloud Scheduler OIDC job.
+1. **Runtime model selector (planned, not yet implemented)** — Add optional `model_name` field to `AgentRequest` schema, modify `run_agent()` to use request-provided model or fall back to settings default, and add sidebar selectbox in Streamlit UI to let users switch between `gemini-3.6-flash`, `gemini-2.5-flash` (if available), and other supported models without redeploying.
+2. **Phase 7 (observability & audit reporting)** — Extend `tracer.py` with `prompt_tokens`, `completion_tokens`, and `grounded_response` fields; create `notifier.py` with SMTP HTML email dispatch; add `/cron/daily-report` endpoint to aggregate daily metrics from traces; configure Cloud Scheduler OIDC job with `run.invoker` binding for automated daily reports.
 
 ---
 
@@ -609,7 +608,7 @@ ADMIN_EMAIL=
 | Dense retrieval | **faiss-cpu**, **numpy** |
 | Sparse retrieval | **rank-bm25** (`BM25Okapi`) |
 | PDF parsing | **pypdf** |
-| LLM (chat) | **google-generativeai** (Gemini), **openai** (OpenAI) |
+| LLM (chat) | **google-genai** (Gemini), **openai** (OpenAI) |
 | Embeddings | Same provider SDKs via `EmbeddingService` |
 | Serialization | **pickle** (BM25 index), **json** (chunk metadata), **jsonl** (traces) |
 | Testing | **pytest** (30 tests) |
@@ -811,7 +810,7 @@ docker compose up --build
 
 ## Known Notes & Future Considerations
 
-1. **`google.generativeai` deprecation warning** — Google recommends migrating to `google.genai` SDK; not blocking, scheduled for future refactor.
+1. **Gemini SDK Migration** — Migrated from legacy `google-genai` to unified `google-genai` SDK (v2.18.1+) to support Gemini 3.x models (`gemini-3.6-flash`). The new SDK automatically handles `thought_signature` preservation for function calling, which is mandatory for Gemini 3.x but was missing in the legacy SDK. **Impact:** All chat and embedding calls now use `genai.Client()` instead of `genai.configure()`; response objects are native SDK `Content` types. Deployed model is **`gemini-3.6-flash`**.
 2. **GCS policies mount (Phase 6)** — Index artifacts persist via GCS volume at `/app/storage`; `data/policies/` requires a separate persistence strategy (second GCS mount or shared bucket prefix) for uploaded PDFs to survive Cloud Run restarts.
 3. **`DEMO_PASSWORD` in Docker Compose** — Frontend service does not yet load `env_file`; Cloud Run deployment must inject `DEMO_PASSWORD` (via Secret Manager) and `BACKEND_URL` explicitly on the frontend service.
 4. **Backend ingress + IAM (Phase 6 + 7)** — Backend **must** use `--ingress=internal --no-allow-unauthenticated`. Two **separate** `roles/run.invoker` grants on the backend service: (a) frontend SA for chat/upload, (b) Scheduler SA for `/cron/daily-report`. Confirm both members appear in `gcloud run services get-iam-policy`. Frontend **must** attach cached IAM identity tokens on httpx calls (cloud-run only).

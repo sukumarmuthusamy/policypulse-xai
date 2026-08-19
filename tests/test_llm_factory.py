@@ -75,3 +75,44 @@ def test_from_gemini_response_prefers_tool_calls_over_text() -> None:
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].name == "retrieve_policy_context"
     assert result.content == "Checking policies."
+
+
+def test_to_gemini_contents_replays_raw_model_parts_with_thought_signature() -> None:
+    client = object.__new__(GeminiLLMClient)
+    raw_parts = [
+        "Checking policies.",
+        {
+            "function_call": {
+                "name": "retrieve_policy_context",
+                "args": {"query": "remote work"},
+            },
+            "thought_signature": "encrypted-signature-value",
+        },
+    ]
+    messages = [
+        ChatMessage(role=MessageRole.USER, content="What is the remote work policy?"),
+        ChatMessage(
+            role=MessageRole.ASSISTANT,
+            content="Checking policies.",
+            tool_calls=[
+                UnifiedToolCall(
+                    id="call_1",
+                    name="retrieve_policy_context",
+                    arguments={"query": "remote work"},
+                )
+            ],
+            gemini_model_parts=raw_parts,
+        ),
+        ChatMessage(
+            role=MessageRole.TOOL,
+            content="Passage one",
+            name="retrieve_policy_context",
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, contents = client._to_gemini_contents(messages)
+
+    assert contents[1]["role"] == "model"
+    assert contents[1]["parts"] == raw_parts
+    assert contents[1]["parts"][1]["thought_signature"] == "encrypted-signature-value"

@@ -73,6 +73,7 @@ def run_agent(
                 role=MessageRole.ASSISTANT,
                 content=completion.content,
                 tool_calls=completion.tool_calls,
+                gemini_raw_content=completion.gemini_raw_content,
             )
         )
 

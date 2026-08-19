@@ -25,10 +25,9 @@ class GeminiLLMClient:
         if not self.settings.gemini_api_key:
             raise ValueError("GEMINI_API_KEY is required when MODEL_PROVIDER=gemini")
 
-        import google.generativeai as genai
+        from google import genai
 
-        genai.configure(api_key=self.settings.gemini_api_key)
-        self._genai = genai
+        self._client = genai.Client(api_key=self.settings.gemini_api_key)
         self.provider = "gemini"
         self.model_name = self.settings.resolved_model_name
 
@@ -37,22 +36,33 @@ class GeminiLLMClient:
         messages: list[ChatMessage],
         tools: list[ToolDefinition] | None = None,
     ) -> LLMCompletionResult:
+        from google.genai import types
+        
         system_instruction, contents = self._to_gemini_contents(messages)
-        tool_config = None
+        
+        config_dict: dict[str, Any] = {}
+        if system_instruction:
+            config_dict["system_instruction"] = system_instruction
         if tools:
-            tool_config = [{"function_declarations": get_gemini_tool_declarations()}]
-
-        model = self._genai.GenerativeModel(
-            model_name=self.model_name,
-            system_instruction=system_instruction,
-            tools=tool_config,
+            config_dict["tools"] = [{"function_declarations": get_gemini_tool_declarations()}]
+        
+        config = types.GenerateContentConfig(**config_dict) if config_dict else None
+        
+        response = self._client.models.generate_content(
+            model=self.model_name,
+            contents=contents,
+            config=config,
         )
-        response = model.generate_content(contents)
         return self._from_gemini_response(response)
 
-    def _to_gemini_contents(self, messages: list[ChatMessage]) -> tuple[str | None, list[dict[str, Any]]]:
+    def _to_gemini_contents(self, messages: list[ChatMessage]) -> tuple[str | None, list[Any]]:
+        """Convert ChatMessages to new SDK format.
+        
+        The new SDK automatically handles thought_signature when we pass
+        Content objects back unchanged.
+        """
         system_instruction: str | None = None
-        contents: list[dict[str, Any]] = []
+        contents: list[Any] = []
         index = 0
 
         while index < len(messages):
@@ -64,29 +74,26 @@ class GeminiLLMClient:
                 continue
 
             if message.role == MessageRole.USER:
-                contents.append({"role": "user", "parts": [message.content or ""]})
+                contents.append({"role": "user", "parts": [{"text": message.content or ""}]})
                 index += 1
                 continue
 
             if message.role == MessageRole.ASSISTANT:
-                parts: list[dict[str, Any]] = []
+                if message.gemini_raw_content:
+                    # Pass the SDK's Content object back unchanged
+                    # This preserves thought_signature automatically
+                    contents.append(message.gemini_raw_content)
+                    index += 1
+                    continue
+
+                # Fallback for text-only responses (no tool calls)
                 if message.content:
-                    parts.append(message.content)
-                for tool_call in message.tool_calls:
-                    parts.append(
-                        {
-                            "function_call": {
-                                "name": tool_call.name,
-                                "args": tool_call.arguments,
-                            }
-                        }
-                    )
-                contents.append({"role": "model", "parts": parts})
+                    contents.append({"role": "model", "parts": [{"text": message.content}]})
                 index += 1
                 continue
 
             if message.role == MessageRole.TOOL:
-                # Gemini expects function responses in a single user turn.
+                # Gemini expects function responses in a single user turn
                 function_response_parts: list[dict[str, Any]] = []
                 while index < len(messages) and messages[index].role == MessageRole.TOOL:
                     tool_message = messages[index]
@@ -107,42 +114,66 @@ class GeminiLLMClient:
         return system_instruction, contents
 
     def _from_gemini_response(self, response: object) -> LLMCompletionResult:
+        """Parse new google-genai SDK response.
+        
+        The new SDK automatically preserves thought_signature when we store
+        response.candidates[0].content and pass it back in the next request.
+        """
         text_parts: list[str] = []
         tool_calls: list[UnifiedToolCall] = []
+        raw_content = None
 
-        candidates = getattr(response, "candidates", None) or []
-        if candidates:
+        candidates = getattr(response, "candidates", None)
+        if candidates and len(candidates) > 0:
             candidate = candidates[0]
             content = getattr(candidate, "content", None)
+            
+            # Store the entire Content object for thought_signature preservation
+            if content is not None:
+                raw_content = content
+            
             parts = getattr(content, "parts", None) if content is not None else None
 
             if parts:
                 for part_index, part in enumerate(parts):
+                    # Extract text
                     text = getattr(part, "text", None)
                     if text:
                         text_parts.append(text)
 
+                    # Extract tool calls
                     function_call = getattr(part, "function_call", None)
-                    if function_call is not None and getattr(function_call, "name", None):
-                        args = dict(function_call.args) if function_call.args else {}
-                        tool_calls.append(
-                            UnifiedToolCall(
-                                id=f"call_{part_index}",
-                                name=function_call.name,
-                                arguments=args,
+                    if function_call is not None:
+                        name = getattr(function_call, "name", None)
+                        if name:
+                            args = getattr(function_call, "args", {})
+                            # Convert args to dict if needed
+                            if hasattr(args, "items"):
+                                args = dict(args)
+                            elif not isinstance(args, dict):
+                                args = {}
+                            
+                            tool_calls.append(
+                                UnifiedToolCall(
+                                    id=f"call_{part_index}",
+                                    name=name,
+                                    arguments=args,
+                                )
                             )
-                        )
 
+        # For text-only responses, don't store raw_content
         if not tool_calls:
-            aggregated_text = self._extract_gemini_text(response)
-            if aggregated_text:
-                text_parts = [aggregated_text]
+            text = getattr(response, "text", None)
+            if text:
+                text_parts = [text]
+            raw_content = None
 
         content = "\n".join(text_parts).strip() or None
         return LLMCompletionResult(
             content=content,
             tool_calls=tool_calls,
             raw_intent=content,
+            gemini_raw_content=raw_content if tool_calls else None,
         )
 
     @staticmethod

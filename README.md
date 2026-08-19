@@ -9,9 +9,17 @@ PolicyPulse is built as a **dual-service architecture** (FastAPI backend + Strea
 | Area | Status |
 |------|--------|
 | **Phases 1–5** (RAG, agent, API, UI, Docker) | ✅ Complete |
-| **Phase 6 local** (security, IAM client code, multi-doc retrieval, XAI labeling) | ✅ Complete |
-| **Phase 6 cloud** (GCS mounts, Cloud Run deploy, Secret Manager) | ⬜ Pending |
+| **Phase 6** (security, Cloud Run, GCS mounts, VPC egress, Secret Manager) | ✅ Complete |
 | **Phase 7** (daily audit reports, SMTP notifier) | ⬜ Planned |
+
+### Live Cloud Run Deployment
+
+| Service | URL | Access |
+|---------|-----|--------|
+| **Frontend** (Public) | [https://policypulse-frontend-438586228570.us-central1.run.app](https://policypulse-frontend-438586228570.us-central1.run.app) | Password-gated demo |
+| **Backend** (Internal) | `https://policypulse-backend-438586228570.us-central1.run.app` | Internal-only ingress (not publicly reachable) |
+
+The production deployment uses Google Cloud Run with GCS-backed persistent storage, VPC Direct Egress, Private Google Access, and dual IAM invoker bindings (frontend + scheduler service accounts).
 
 ---
 
@@ -73,7 +81,7 @@ PolicyPulse is built as a **dual-service architecture** (FastAPI backend + Strea
 | Dense Retrieval | faiss-cpu, numpy |
 | Sparse Retrieval | rank-bm25 (BM25Okapi) |
 | PDF Parsing | pypdf |
-| LLM & Embeddings | google-generativeai (Gemini), openai |
+| LLM & Embeddings | google-genai (Gemini), openai |
 | Configuration | pydantic-settings, python-dotenv |
 | Testing | pytest (30 tests) |
 | Containers | Docker, Docker Compose |
@@ -109,7 +117,7 @@ Edit `.env` and set your API credentials:
 
 ```bash
 MODEL_PROVIDER=gemini
-MODEL_NAME=gemini-2.5-flash
+MODEL_NAME=gemini-3.6-flash
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
@@ -272,7 +280,7 @@ python scripts/verify_agent.py     # End-to-end agent smoke test
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MODEL_PROVIDER` | `gemini` | LLM provider: `gemini` or `openai` |
-| `MODEL_NAME` | `gemini-2.5-flash` | Chat model override |
+| `MODEL_NAME` | `gemini-3.6-flash` | Chat model override (deployed model; `gemini-2.5-flash` returns 404 for new API keys/projects) |
 | `GEMINI_API_KEY` | — | Required when `MODEL_PROVIDER=gemini` |
 | `OPENAI_API_KEY` | — | Required when `MODEL_PROVIDER=openai` |
 | `DEPLOYMENT_TARGET` | `local` | Deployment context: `local`, `docker`, `cloud-run` |

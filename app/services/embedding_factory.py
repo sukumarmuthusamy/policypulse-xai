@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.config import Settings, get_settings
 
@@ -21,6 +21,7 @@ class EmbeddingService:
         self.model_name = self.settings.resolved_embedding_model_name
         self.batch_size = batch_size or self.DEFAULT_BATCH_SIZE
         self._openai_client: OpenAI | None = None
+        self._gemini_client: Any = None
 
         if self.provider == "gemini":
             self._configure_gemini()
@@ -33,9 +34,9 @@ class EmbeddingService:
         if not self.settings.gemini_api_key:
             raise ValueError("GEMINI_API_KEY is required when MODEL_PROVIDER=gemini")
 
-        import google.generativeai as genai
+        from google import genai
 
-        genai.configure(api_key=self.settings.gemini_api_key)
+        self._gemini_client = genai.Client(api_key=self.settings.gemini_api_key)
 
     def _configure_openai(self) -> None:
         if not self.settings.openai_api_key:
@@ -68,11 +69,15 @@ class EmbeddingService:
         return self.embed_texts([text], task_type=task_type)[0]
 
     def _embed_batch_gemini(self, texts: list[str], *, task_type: str) -> list[list[float]]:
-        import google.generativeai as genai
-
-        model = f"models/{self.model_name}"
-        result = genai.embed_content(model=model, content=texts, task_type=task_type)
-        return self._normalize_gemini_embeddings(result, expected_count=len(texts))
+        result = self._gemini_client.models.embed_content(
+            model=self.model_name,
+            contents=texts,
+        )
+        # New SDK returns EmbedContentResponse with .embeddings attribute
+        embeddings = getattr(result, "embeddings", None)
+        if embeddings:
+            return [list(emb.values) for emb in embeddings]
+        raise ValueError(f"Unexpected embedding response structure from new SDK")
 
     def _embed_batch_openai(self, texts: list[str]) -> list[list[float]]:
         response = self.openai_client.embeddings.create(
